@@ -30,6 +30,7 @@
     .subtitle {
       margin-top: 0;
       color: #bbb;
+      line-height: 1.4;
     }
 
     #reader {
@@ -98,6 +99,12 @@
       background: white;
       color: black;
     }
+
+    #statusMessage {
+      margin-top: 15px;
+      color: #bbb;
+      font-size: 15px;
+    }
   </style>
 </head>
 
@@ -108,16 +115,22 @@
     <h1>PM40 Gala Check In</h1>
 
     <p class="subtitle">
-      Pastor A. W. Anthony Mays 40th Pastoral Anniversary Gala
+      Pastor A. W. Anthony Mays<br>
+      40th Pastoral Anniversary Gala
     </p>
 
     <button id="startButton" onclick="startScanner()">
       START SCANNER
     </button>
 
+    <div id="statusMessage">
+      Ready to scan
+    </div>
+
     <div id="reader"></div>
 
     <div id="result" class="result">
+
       <h2 id="resultTitle"></h2>
 
       <div id="ticketId" class="ticket-id"></div>
@@ -126,9 +139,6 @@
 
       <div id="checkInTime" class="time"></div>
 
-      <button onclick="resetScanner()">
-        SCAN NEXT TICKET
-      </button>
     </div>
 
   </div>
@@ -140,6 +150,14 @@ const API_URL =
 
 let scanner = null;
 let scanning = false;
+let resetTimer = null;
+
+
+/*
+====================================================
+START SCANNER
+====================================================
+*/
 
 function startScanner() {
 
@@ -147,15 +165,24 @@ function startScanner() {
     return;
   }
 
+  clearTimeout(resetTimer);
+
   document.getElementById("result").style.display = "none";
+
+  document.getElementById("statusMessage").textContent =
+    "Camera ready. Scan ticket.";
 
   scanner = new Html5Qrcode("reader");
 
   scanner.start(
-    { facingMode: "environment" },
+
+    {
+      facingMode: "environment"
+    },
 
     {
       fps: 10,
+
       qrbox: {
         width: 250,
         height: 250
@@ -172,11 +199,14 @@ function startScanner() {
 
     document.getElementById("startButton").style.display = "none";
 
+    document.getElementById("statusMessage").textContent =
+      "Ready to scan";
+
   }).catch(error => {
 
     showError(
       "CAMERA ERROR",
-      "Unable to access the camera. Please make sure camera permission is allowed."
+      "Unable to access the camera. Make sure camera permission is allowed."
     );
 
     console.error(error);
@@ -185,10 +215,22 @@ function startScanner() {
 }
 
 
+/*
+====================================================
+NORMAL FAILED SCANS
+====================================================
+*/
+
 function onScanFailure(error) {
-  // Ignore normal failed scans.
+  // Normal failed scans are ignored.
 }
 
+
+/*
+====================================================
+SUCCESSFUL QR SCAN
+====================================================
+*/
 
 async function onScanSuccess(decodedText) {
 
@@ -208,18 +250,30 @@ async function onScanSuccess(decodedText) {
 
   }
 
-  const ticketId = decodedText.trim().toUpperCase();
+  const ticketId =
+    decodedText.trim().toUpperCase();
+
+  document.getElementById("statusMessage").textContent =
+    "Checking ticket...";
 
   checkTicket(ticketId);
 }
 
+
+/*
+====================================================
+SEND TICKET TO GOOGLE
+====================================================
+*/
 
 async function checkTicket(ticketId) {
 
   try {
 
     const response = await fetch(
-      API_URL + "?ticket=" + encodeURIComponent(ticketId)
+      API_URL +
+      "?ticket=" +
+      encodeURIComponent(ticketId)
     );
 
     if (!response.ok) {
@@ -243,85 +297,175 @@ async function checkTicket(ticketId) {
 }
 
 
+/*
+====================================================
+DISPLAY RESULT
+====================================================
+*/
+
 function showResult(data) {
 
-  const result = document.getElementById("result");
-  const title = document.getElementById("resultTitle");
-  const ticketId = document.getElementById("ticketId");
-  const ticketType = document.getElementById("ticketType");
-  const time = document.getElementById("checkInTime");
+  const result =
+    document.getElementById("result");
+
+  const title =
+    document.getElementById("resultTitle");
+
+  const ticketId =
+    document.getElementById("ticketId");
+
+  const ticketType =
+    document.getElementById("ticketType");
+
+  const time =
+    document.getElementById("checkInTime");
 
   result.className = "result";
 
-  ticketId.textContent = data.ticketId || "";
+  ticketId.textContent =
+    data.ticketId || "";
 
   ticketType.textContent =
-    data.type ? data.type.toUpperCase() : "";
+    data.type
+      ? data.type.toUpperCase()
+      : "";
+
+
+  /*
+  VALID TICKET
+  */
 
   if (data.status === "CHECKED_IN") {
 
     result.classList.add("valid");
 
-    title.textContent = "VALID TICKET";
+    title.textContent =
+      "VALID TICKET";
 
     time.textContent =
-      "CHECKED IN • " + formatTime(data.checkInTime);
+      "CHECKED IN • " +
+      formatTime(data.checkInTime);
 
   }
+
+
+  /*
+  ALREADY CHECKED IN
+  */
 
   else if (data.status === "ALREADY_CHECKED_IN") {
 
     result.classList.add("already");
 
-    title.textContent = "ALREADY CHECKED IN";
+    title.textContent =
+      "ALREADY CHECKED IN";
 
     time.textContent =
-      "First scanned • " + formatTime(data.checkInTime);
+      "FIRST SCANNED • " +
+      formatTime(data.checkInTime);
 
   }
+
+
+  /*
+  INVALID TICKET
+  */
 
   else if (data.status === "NOT_FOUND") {
 
     result.classList.add("invalid");
 
-    title.textContent = "INVALID TICKET";
+    title.textContent =
+      "INVALID TICKET";
 
-    time.textContent = "Ticket not found.";
+    time.textContent =
+      "Ticket not found.";
 
   }
+
+
+  /*
+  OTHER ERROR
+  */
 
   else {
 
     result.classList.add("error");
 
-    title.textContent = "SYSTEM ERROR";
+    title.textContent =
+      "SYSTEM ERROR";
 
     time.textContent =
-      data.message || "Unable to process ticket.";
+      data.message ||
+      "Unable to process ticket.";
 
   }
 
-  result.style.display = "block";
+
+  result.style.display =
+    "block";
+
+
+  /*
+  AUTOMATICALLY RETURN
+  TO SCANNING AFTER 3 SECONDS
+  */
+
+  resetTimer =
+    setTimeout(() => {
+
+      resetScanner();
+
+    }, 3000);
+
 }
 
+
+/*
+====================================================
+ERROR DISPLAY
+====================================================
+*/
 
 function showError(titleText, message) {
 
-  const result = document.getElementById("result");
+  const result =
+    document.getElementById("result");
 
-  result.className = "result error";
+  result.className =
+    "result error";
 
-  document.getElementById("resultTitle").textContent = titleText;
+  document.getElementById("resultTitle")
+    .textContent = titleText;
 
-  document.getElementById("ticketId").textContent = "";
+  document.getElementById("ticketId")
+    .textContent = "";
 
-  document.getElementById("ticketType").textContent = "";
+  document.getElementById("ticketType")
+    .textContent = "";
 
-  document.getElementById("checkInTime").textContent = message;
+  document.getElementById("checkInTime")
+    .textContent = message;
 
-  result.style.display = "block";
+  result.style.display =
+    "block";
+
+
+  resetTimer =
+    setTimeout(() => {
+
+      resetScanner();
+
+    }, 3000);
+
 }
 
+
+/*
+====================================================
+FORMAT CHECK IN TIME
+====================================================
+*/
 
 function formatTime(timestamp) {
 
@@ -329,27 +473,45 @@ function formatTime(timestamp) {
     return "";
   }
 
-  const date = new Date(timestamp);
+  const date =
+    new Date(timestamp);
 
   if (isNaN(date.getTime())) {
     return timestamp;
   }
 
   return date.toLocaleTimeString([], {
+
     hour: "numeric",
+
     minute: "2-digit",
+
     second: "2-digit"
+
   });
+
 }
 
 
+/*
+====================================================
+RESET AND SCAN NEXT TICKET
+====================================================
+*/
+
 function resetScanner() {
 
-  document.getElementById("result").style.display = "none";
+  clearTimeout(resetTimer);
 
-  document.getElementById("startButton").style.display = "block";
+  document.getElementById("result")
+    .style.display = "none";
+
+  document.getElementById("statusMessage")
+    .textContent =
+    "Ready for next ticket.";
 
   startScanner();
+
 }
 
 </script>
